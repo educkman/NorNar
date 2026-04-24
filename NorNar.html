@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendler</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #fff; color: #1a1a1a; font-size: 14px; padding: 12px; transition: background 0.2s, color 0.2s; }
+body.dark { background: #111; color: #e8e8e8; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+.card { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 12px 14px; }
+body.dark .card { background: #1e1e1e; border-color: rgba(255,255,255,0.1); }
+
+.weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.card-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+.weather-temp { font-size: 26px; font-weight: 500; }
+.weather-desc { font-size: 12px; color: #888; margin-top: 2px; }
+.weather-details { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; font-size: 11px; color: #888; }
+
+.top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.top-bar-title { font-size: 13px; font-weight: 500; }
+.controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.toggle-btn { font-size: 12px; padding: 5px 12px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.25); background: transparent; color: #666; cursor: pointer; white-space: nowrap; }
+.toggle-btn.active { background: #f0f0f0; color: #1a1a1a; font-weight: 500; border-color: rgba(0,0,0,0.35); }
+body.dark .toggle-btn { border-color: rgba(255,255,255,0.2); color: #aaa; }
+body.dark .toggle-btn.active { background: #2a2a2a; color: #e8e8e8; border-color: rgba(255,255,255,0.35); }
+
+.dm-btn { font-size: 12px; padding: 5px 12px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.25); background: transparent; color: #555; cursor: pointer; }
+body.dark .dm-btn { border-color: rgba(255,255,255,0.2); color: #ccc; background: #2a2a2a; }
+
+.dep-table { width: 100%; border-collapse: collapse; }
+.dep-table th { font-size: 11px; color: #888; font-weight: 400; text-align: left; padding: 3px 0; border-bottom: 0.5px solid rgba(0,0,0,0.1); }
+body.dark .dep-table th { color: #666; border-color: rgba(255,255,255,0.08); }
+.dep-table td { padding: 7px 0; border-bottom: 0.5px solid rgba(0,0,0,0.06); font-size: 13px; vertical-align: middle; }
+body.dark .dep-table td { border-color: rgba(255,255,255,0.05); }
+.dep-table tr:last-child td { border-bottom: none; }
+
+.line-badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
+.badge-tbane { background: #003087; color: #fff; }
+.badge-vy { background: #e8413c; color: #fff; }
+
+.dep-time { font-weight: 500; }
+.dep-delay { font-size: 11px; color: #c0392b; margin-left: 3px; }
+.dep-platform { font-size: 11px; color: #888; }
+
+.leg-header { font-size: 12px; font-weight: 500; color: #888; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+body.dark .leg-header { color: #666; }
+
+.section-divider { margin: 10px 0 8px; border-top: 0.5px solid rgba(0,0,0,0.08); padding-top: 10px; }
+body.dark .section-divider { border-color: rgba(255,255,255,0.08); }
+
+.refresh-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.refresh-text { font-size: 11px; color: #aaa; }
+.refresh-btn { font-size: 11px; padding: 4px 10px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.2); background: transparent; color: #666; cursor: pointer; }
+body.dark .refresh-btn { border-color: rgba(255,255,255,0.2); color: #aaa; }
+
+.loading { color: #aaa; font-size: 12px; padding: 6px 0; }
+
+/* Mobile tweaks */
+@media (max-width: 480px) {
+  body { padding: 8px; }
+  .weather-temp { font-size: 22px; }
+  .dep-table th:nth-child(4), .dep-table td:nth-child(4) { display: none; }
+  .controls { gap: 4px; }
+  .toggle-btn, .dm-btn { font-size: 11px; padding: 4px 10px; }
+}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Oslo pendler-dashboard: vær, avgangstavle og forsinkelser</h2>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+  <div style="font-size:22px;font-weight:600;letter-spacing:-0.5px;">NorNår</div>
+  <button class="dm-btn" id="dm-toggle" onclick="toggleDark()">Mørk</button>
+</div>
+
+<div class="weather-grid" id="weather-grid">
+  <div class="card" id="weather-skoppum">
+    <div class="card-label">Skoppum — hjemme</div>
+    <div class="loading">Laster…</div>
+  </div>
+  <div class="card" id="weather-oslo">
+    <div class="card-label">Oslo — kontor</div>
+    <div class="loading">Laster…</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="top-bar">
+    <div class="top-bar-title">Avgangstavle</div>
+    <div class="controls">
+      <button class="toggle-btn active" id="btn-morning" onclick="setDir('morning')">Til Oslo</button>
+      <button class="toggle-btn" id="btn-evening" onclick="setDir('evening')">Til Skoppum</button>
+    </div>
+  </div>
+  <div id="departures-content"><div class="loading">Laster avganger…</div></div>
+  <div class="refresh-row">
+    <span class="refresh-text" id="refresh-time">–</span>
+    <button class="refresh-btn" onclick="loadAll()">Oppdater</button>
+  </div>
+</div>
+
+<script>
+const STOPS = {
+  lindeberg: 'NSR:StopPlace:58243',
+  nationalteateret_tbane: 'NSR:StopPlace:58366',
+  nationalteateret_train: 'NSR:StopPlace:59977',
+  skoppum: 'NSR:StopPlace:56774'
+};
+const WEATHER_LOCS = [
+  { id: 'weather-skoppum', lat: 59.418, lon: 10.432, label: 'Skoppum — hjemme' },
+  { id: 'weather-oslo', lat: 59.914, lon: 10.733, label: 'Oslo — kontor' }
+];
+const WMO = {0:'Klarvær',1:'Nesten klart',2:'Delvis skyet',3:'Overskyet',45:'Tåke',48:'Rimtåke',51:'Yr',53:'Yr',55:'Yr',61:'Lett regn',63:'Regn',65:'Kraftig regn',71:'Lett snø',73:'Snø',75:'Kraftig snø',77:'Snøkorn',80:'Regnbyger',81:'Regnbyger',82:'Kraftige regnbyger',85:'Snøbyger',86:'Kraftige snøbyger',95:'Tordenvær',96:'Tordenvær m/hagl',99:'Tordenvær m/hagl'};
+
+let direction = (new Date().getHours() >= 5 && new Date().getHours() < 13) ? 'morning' : 'evening';
+let locationDetected = false;
+
+function toggleDark() {
+  const dark = document.body.classList.toggle('dark');
+  document.getElementById('dm-toggle').textContent = dark ? 'Lys' : 'Mørk';
+}
+if (matchMedia('(prefers-color-scheme: dark)').matches) toggleDark();
+
+function setDir(d, skipDeps) {
+  direction = d;
+  document.getElementById('btn-morning').classList.toggle('active', d === 'morning');
+  document.getElementById('btn-evening').classList.toggle('active', d === 'evening');
+  const grid = document.getElementById('weather-grid');
+  const s = document.getElementById('weather-skoppum');
+  const o = document.getElementById('weather-oslo');
+  if (d === 'morning') { grid.insertBefore(s, o); } else { grid.insertBefore(o, s); }
+  if (!skipDeps) loadDepartures();
+}
+
+function detectDir() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    if (locationDetected) return;
+    locationDetected = true;
+    setDir(pos.coords.latitude < 59.65 ? 'evening' : 'morning', true);
+    loadDepartures();
+  }, () => {});
+}
+
+async function fetchWeather(loc) {
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,precipitation,windspeed_10m,weathercode&wind_speed_unit=ms&timezone=Europe/Oslo`);
+  const d = await r.json(); const c = d.current;
+  document.getElementById(loc.id).innerHTML = `
+    <div class="card-label">${loc.label}</div>
+    <div class="weather-temp">${Math.round(c.temperature_2m)}°C</div>
+    <div class="weather-desc">${WMO[c.weathercode] || '–'}</div>
+    <div class="weather-details"><span>${c.precipitation} mm</span><span>${Math.round(c.windspeed_10m)} m/s</span></div>`;
+}
+
+async function fetchDeps(stopId, destFilter, limit) {
+  const q = `{stopPlace(id:"${stopId}"){estimatedCalls(timeRange:7200,numberOfDepartures:20){realtime expectedDepartureTime aimedDepartureTime destinationDisplay{frontText} serviceJourney{line{publicCode}} quay{name}}}}`;
+  const r = await fetch('https://api.entur.io/journey-planner/v3/graphql', {
+    method: 'POST', headers: {'Content-Type':'application/json','ET-Client-Name':'pendler-dashboard'},
+    body: JSON.stringify({query: q})
+  });
+  const d = await r.json();
+  let calls = d?.data?.stopPlace?.estimatedCalls || [];
+  if (destFilter) calls = calls.filter(c => destFilter.some(f => (c.destinationDisplay?.frontText||'').toLowerCase().includes(f.toLowerCase())));
+  return calls.slice(0, limit||4);
+}
+
+function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'}) : '–'; }
+function delay(a,e) { return a&&e ? Math.round((new Date(e)-new Date(a))/60000) : 0; }
+
+function renderLeg(deps, badgeClass, badge, from, to) {
+  if (!deps.length) return `<div class="leg-header"><span class="line-badge ${badgeClass}">${badge}</span>${from} → ${to}</div><div class="loading">Ingen avganger</div>`;
+  let h = `<div class="leg-header"><span class="line-badge ${badgeClass}">${badge}</span>${from} → ${to}</div>`;
+  h += `<table class="dep-table"><thead><tr><th>Linje</th><th>Retning</th><th>Tid</th><th>Spor</th></tr></thead><tbody>`;
+  deps.forEach(d => {
+    const dl = delay(d.aimedDepartureTime, d.expectedDepartureTime);
+    h += `<tr>
+      <td><span class="line-badge ${badgeClass}">${d.serviceJourney?.line?.publicCode||'–'}</span></td>
+      <td>${d.destinationDisplay?.frontText||'–'}</td>
+      <td><span class="dep-time">${fmtTime(d.expectedDepartureTime)}</span>${dl>=2?`<span class="dep-delay">+${dl}m</span>`:''}</td>
+      <td><span class="dep-platform">${d.quay?.name||'–'}</span></td>
+    </tr>`;
+  });
+  h += `</tbody></table>`;
+  return h;
+}
+
+async function loadDepartures() {
+  const el = document.getElementById('departures-content');
+  el.innerHTML = '<div class="loading">Laster avganger…</div>';
+  try {
+    let html = '';
+    if (direction === 'morning') {
+      const [tb, vy] = await Promise.all([
+        fetchDeps(STOPS.lindeberg, null, 4),
+        fetchDeps(STOPS.nationalteateret_train, ['Skoppum','Tønsberg','Sandefjord','Larvik'], 4)
+      ]);
+      html = renderLeg(tb,'badge-tbane','T-bane','Lindeberg','Nationalteateret');
+      html += `<div class="section-divider"></div>`;
+      html += renderLeg(vy,'badge-vy','Vy','Nationalteateret','Skoppum');
+    } else {
+      const [vy, tb] = await Promise.all([
+        fetchDeps(STOPS.skoppum, ['Oslo','Asker'], 4),
+        fetchDeps(STOPS.nationalteateret_tbane, ['Lindeberg','Ellingsrudåsen','Mortensrud'], 4)
+      ]);
+      html = renderLeg(vy,'badge-vy','Vy','Skoppum','Nationalteateret');
+      html += `<div class="section-divider"></div>`;
+      html += renderLeg(tb,'badge-tbane','T-bane','Nationalteateret','Lindeberg');
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="loading">Kunne ikke laste avganger.</div>`;
+  }
+  document.getElementById('refresh-time').textContent = 'Oppdatert ' + new Date().toLocaleTimeString('no-NO',{hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadAll() {
+  WEATHER_LOCS.forEach(loc => fetchWeather(loc).catch(() => {
+    document.getElementById(loc.id).innerHTML = `<div class="card-label">${loc.label}</div><div class="loading">Feil ved lasting</div>`;
+  }));
+  await loadDepartures();
+}
+
+setDir(direction, true);
+detectDir();
+loadAll();
+setInterval(loadAll, 60000);
+</script>
+</body>
+</html>
